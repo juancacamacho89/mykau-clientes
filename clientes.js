@@ -161,6 +161,10 @@
 
   // lo que no va en la versión de clientes
   const st = document.createElement("style");
-  st.textContent = `[data-dw-bn]{display:none!important}`;
+  st.textContent = `[data-dw-bn]{display:none!important}
+    .brand img,.brand-login img{background:#0b367a!important}   /* logo azul: Mykau Clientes (la Mykau de El Recodo / La Isla es verde) */
+    html:root{--accent:#1f5fbf;--soft:#eef3fb}   /* botones, menús y pestañas en azul (html:root gana al :root de la app) */
+    @media (prefers-color-scheme: dark){ html:root:not([data-theme="light"]){--accent:#5b9bff;--soft:#1b2433} }
+    html:root[data-theme="dark"]{--accent:#5b9bff;--soft:#1b2433}`;
   (document.head || document.documentElement).appendChild(st);
 })();
