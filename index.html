@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-title" content="Mykau">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<script src="config.js?v=202611241834"></script>
-<script src="clientes.js?v=202611241834"></script>
+<script src="config.js?v=202611241854"></script>
+<script src="clientes.js?v=202611241854"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <style>
 /* menú lateral ☰ */
@@ -2980,6 +2980,7 @@ const rgCat = r => r.kind==="vacas" ? (RG_REPRO_EV.includes(r.etype) ? "repro" :
 const RG_HERD_FARM = { RC:1, ISLA:7 };
 let rgReady = false, rgNames = null, rgState = null;
 async function initRegistros(){
+  await prodFarms().catch(()=>{});   // nombres de las fincas del usuario para el filtro y la lista
   if (!rgReady){
     rgReady = true;
     rgState = { farm:"", cat:"", status:"all", user:"", by:"evento", q:"", from:addDays(today(), -30), to:today(), view:jget("rgView", "tablas") };
@@ -3370,7 +3371,7 @@ async function rgExport(){
   const cat = c => (RG_CATS.find(x=>x[0]===c) || ["", ""])[1].replace(/^\S+\s/, "");
   const head = ["Fecha del evento","Categoría","Tipo","Vaca","Finca","Detalle","Toro","Resultado","Categoría Interherd","Operario","Comentarios","Registró","Registrado el","Estado"];
   const cell = v => String(v ?? "").replace(/[\t\r\n]+/g, " ").trim();
-  const lines = rows.map(r=>[String(r.date || "").slice(0, 10), cat(r.cat), r.title, r.cow, r.farm===7 ? "La Isla" : r.farm===1 ? "El Recodo" : "", r.detail,
+  const lines = rows.map(r=>[String(r.date || "").slice(0, 10), cat(r.cat), r.title, r.cow, r.farm ? farmName(r.farm) : "", r.detail,
     r.raw?.bull, r.raw?.result, r.raw?.category, r.raw?.operator, r.raw?.comments, rgWho(r.who), rgTime(r.when),
     r.status==="app" ? "" : r.status].map(cell).join("\t"));
   const txt = "\ufeff" + [head.join("\t"), ...lines].join("\r\n");
@@ -3410,7 +3411,7 @@ function rgDraw(){
           <div>${r.icon} <b>${esc(r.title)}</b>${r.cow ? ` · <button class="lnk" data-cow="${esc(r.cow)}">${esc(r.cow)}</button>` : ""}</div>
           <div class="sub" style="text-align:right;white-space:nowrap">${rgTime(r.when)}</div></div>
           <div class="sub">${esc(r.detail)}</div>
-          <div class="sub" style="margin-top:2px">Para el ${fmt(r.date)} · <b style="color:var(--ink)">${esc(rgWho(r.who))}</b>${r.farm ? " · " + (r.farm===7 ? "La Isla" : "El Recodo") : ""} ${pill(r.status)}${rgActs(r)}</div></div>`).join("")}`).join("")
+          <div class="sub" style="margin-top:2px">Para el ${fmt(r.date)} · <b style="color:var(--ink)">${esc(rgWho(r.who))}</b>${r.farm ? " · " + farmName(r.farm) : ""} ${pill(r.status)}${rgActs(r)}</div></div>`).join("")}`).join("")
         || `<div class="empty">${pend ? "Nada pendiente de pasar a Interherd 👍" : "Sin registros en esas fechas"}</div>`}</div>`}`;
   if (s.view==="tablas") rgTablesFill(rows);
 }
@@ -5676,7 +5677,7 @@ function rnTablesHtml(){
         return `<tr${has ? "" : ` style="opacity:.5"`}><td style="${sticky}"><b>${fmt(day).slice(0, 5)}</b></td>${grps.map(g=>`<td style="text-align:right">${cell(get(day, g))}</td>`).join("")}${total ? `<td style="text-align:right"><b>${total(day)}</b></td>` : ""}</tr>`; }).join("")}
     </table></div></div>`;
   const sumDay = (day, f) => rep.filter(r=>r.report_date===day).reduce((a, r)=>a + (f(r) || 0), 0);
-  return `<div class="sub" style="margin:0 2px 8px">Últimos 14 días · ${d.farm===7 ? "La Isla" : d.farm===1 ? "El Recodo" : "finca " + d.farm}. Los días sin reporte salen en gris.</div>`
+  return `<div class="sub" style="margin:0 2px 8px">Últimos 14 días · ${farmName(d.farm)}. Los días sin reporte salen en gris.</div>`
     + table("🐄 Animales por lote", "# de animales del reporte de cada día", r=>r?.animals ?? "", day=>sumDay(day, r=>+r.animals) || "")
     + table("🌱 Potrero de cada lote", "Potrero (y 2º potrero) donde estuvo", r=>esc(pad(r)), null)
     + table("🌾 Bultos de concentrado", "Bultos de concentrado que se le dieron a cada lote", r=>n1(conc(r)), day=>n1(sumDay(day, conc)));
@@ -8047,12 +8048,15 @@ function calvingTxt(e){
   return parts.length ? ` · ${esc(parts.join(" · "))}` : "";
 }
 
-const FARM_TG = [["1","El Recodo"],["7","La Isla"]];
-const farmOn = (cur, all) => cur===all ? FARM_TG.map(f=>f[0]) : [String(cur)];
-const farmToggle = (attr, cur, all) => `<div class="chips sm ckpan" style="padding:0"><div class="chips">${FARM_TG.map(([v, t])=>{
+// fincas del usuario (farm_lists, guardadas por prodFarms); si aún no se han descargado, las de siempre
+const FARM_TG0 = [["1","El Recodo"],["7","La Isla"]];
+const farmTg = () => { const fs = jget("mkFarms", []); return fs.length ? fs.map(f=>[String(f.id), farmLabel(f)]) : FARM_TG0; };
+const farmName = id => { const f = jget("mkFarms", []).find(x=>x.id===+id); return f ? farmLabel(f) : (FARM_TG0.find(x=>x[0]===String(id))?.[1] || (id ? "Finca " + id : "")); };
+const farmOn = (cur, all) => cur===all ? farmTg().map(f=>f[0]) : [String(cur)];
+const farmToggle = (attr, cur, all) => `<div class="chips sm ckpan" style="padding:0"><div class="chips">${farmTg().map(([v, t])=>{
   const on = farmOn(cur, all).includes(v); return `<button class="${on ? "on" : ""}" ${attr}="${v}">${on ? "✓ " : ""}${t}</button>`; }).join("")}</div></div>`;
 const farmFlip = (cur, v, all) => { const s = new Set(farmOn(cur, all)); s.has(v) ? s.delete(v) : s.add(v);
-  return !s.size ? cur : s.size===FARM_TG.length ? all : [...s][0]; };
+  return !s.size ? cur : s.size===farmTg().length ? all : [...s][0]; };
 const seg = (name, opts, val) => `<div class="seg">${opts.map(([v,t])=>
   `<label><input type="radio" name="${name}" value="${esc(v)}" ${v===val?"checked":""}><span>${esc(t)}</span></label>`).join("")}</div>`;
 
@@ -10359,12 +10363,12 @@ window.addEventListener("online", ()=>{ updCheckNet(); flushCheck(); });
 window.addEventListener("offline", ()=>updCheckNet());
 
 let ckReady = false;
-function initCheck(){
+async function initCheck(){
   updCheckNet();
   if (!ckReady){
     ckReady = true;
-    const last = jget("ckLast", {});
-    $("ckFarm").innerHTML = seg("ckF", RP_FARMS.map(([id,n])=>[String(id),n]), String(last.farm || 1));
+    const last = jget("ckLast", {}), fl = await rpFarmList();   // fincas del usuario (no fijas El Recodo / La Isla)
+    $("ckFarm").innerHTML = seg("ckF", fl.map(([id,n])=>[String(id),n]), String(fl.some(f=>f[0]===last.farm) ? last.farm : fl[0][0]));
     $("ckDate").value = today(); $("ckDate").max = addDays(today(), 7);
     $("ckFarm").addEventListener("change", ckShow); $("ckDate").addEventListener("change", ckShow);
     $("ckLoad").addEventListener("click", ckDownload);
@@ -11032,10 +11036,16 @@ async function flushCheck(){
 //   cuota total finca G = hato/chequeos al año × (1 + % ME) · cuota novillas F = G × tasa descarte · cuota vacas E = G − F
 let rpRows = null, rpReady = false;
 const RP_FARMS = [[1,"El Recodo"],[7,"La Isla"]];
+// fincas de producción del usuario (de farm_lists); si no hay datos, las de siempre
+async function rpFarmList(){
+  const fs = await prodFarms().catch(()=>null);
+  return fs?.length ? fs.map(f=>[f.id, farmLabel(f)]) : RP_FARMS;
+}
 async function initReport(){
   if (!rpReady){
     rpReady = true;
-    $("rpFarm").innerHTML = seg("rpF", RP_FARMS.map(([id,n])=>[String(id),n]), String(jget("rpLast", {}).farm || 1));
+    const fl = await rpFarmList(), lastF = jget("rpLast", {}).farm;
+    $("rpFarm").innerHTML = seg("rpF", fl.map(([id,n])=>[String(id),n]), String(fl.some(f=>f[0]===lastF) ? lastF : fl[0][0]));
     $("rpPeriod").innerHTML = seg("rpP", [["365","1 año"],["730","2 años"],["99999","Todo"]], jget("rpLast", {}).per || "365");
     $("rpFarm").addEventListener("change", renderReport); $("rpPeriod").addEventListener("change", renderReport);
   }
