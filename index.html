@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-title" content="Mykau">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<script src="config.js?v=202611241854"></script>
-<script src="clientes.js?v=202611241854"></script>
+<script src="config.js?v=202611242018"></script>
+<script src="clientes.js?v=202611242018"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <style>
 /* menú lateral ☰ */
@@ -777,7 +777,7 @@ let isAdmin = adminNow();
 // administrador principal: SOLO por nombre de perfil (corrige/borra todo y ve el sexo en el DPR)
 const isMain = () => myProfile==="Admin Principal";   // Mykau Clientes: Configuración solo Juan
 // cambiar o borrar una foto que ya existe: solo Admin Principal y Gerente (los demás con permiso solo suben la primera)
-const photoBoss = () => isMain() || myProfile==="Gerente";
+const photoBoss = () => isMain() || ["Gerente", "Gerente finca"].includes(myProfile);   // Mykau Clientes: el gerente de la finca cambia y borra fotos
 // "Cargada Hembra/Macho" → "Cargada" para los demás perfiles
 const noSex = r => r == null || isMain() ? r : String(r).replace(/^(cargad[ao])\s+(hembra|macho)\b/i, "$1");
 async function loadRole(){

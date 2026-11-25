@@ -18,7 +18,7 @@
     "pesaje_registrar", "pesaje_totales", "diaria_registrar", "diaria_totales", "diaria_resumen",
     // 24/11/2026: módulos que funcionan con las tablas que ya tiene la base de clientes
     "registros_ver", "listas_ver", "pesot_registrar", "generador_ver"]);
-  const DENY = new Set(["vacas_foto"]);               // fotos: todavía no hay carpeta de fotos en la base de clientes
+  const DENY = new Set([]);                           // fotos: activas desde el 24/11/2026 (SQL/clientes/05_fotos_clientes.sql)
 
   const MKC = window.MKC = {
     client: localStorage.getItem("mkClient") || "",   // código del cliente activo
@@ -96,8 +96,37 @@
     return x;
   }
 
+  // fotos: en Storage cada foto va en la carpeta de la vaca con su ID interno (404/… → Andrew404/…),
+  // así las reglas de la base saben de qué finca es. En la ficha (photo_path) queda como la ve la app.
+  const fixPath = p => { const i = p.indexOf("/"); return i > 0 ? add(decodeURIComponent(p.slice(0, i))) + p.slice(i) : p; };
+  async function fixStorage(url, init) {
+    await loadMap(new Headers(init.headers || {}));
+    if (!pre()) return realFetch(url.toString(), init);
+    const m = url.pathname.match(/^(.*\/storage\/v1\/object\/(?:sign\/|public\/|authenticated\/)?cow-photos\/)(.+)$/);
+    if (m) url.pathname = m[1] + fixPath(m[2]);
+    let body = init.body;
+    if (typeof body === "string" && body) {
+      try {
+        const o = JSON.parse(body);
+        if (Array.isArray(o.paths)) o.paths = o.paths.map(fixPath);          // createSignedUrls
+        if (Array.isArray(o.prefixes)) o.prefixes = o.prefixes.map(fixPath);  // remove
+        body = JSON.stringify(o);
+      } catch (e) { /* no era JSON (la foto) */ }
+    }
+    const res = await realFetch(url.toString(), { ...init, body });
+    const ct = res.headers.get("Content-Type") || "";
+    if (!/json/i.test(ct)) return res;
+    // respuesta de createSignedUrls: devuelve "path" como lo pidió la app
+    const txt = await res.text();
+    let fixed = txt;
+    try { const j = JSON.parse(txt); if (Array.isArray(j)) j.forEach(x => { if (x && typeof x.path === "string") x.path = strip(x.path); }); fixed = JSON.stringify(j); } catch (e) { /* igual */ }
+    const h2 = new Headers(res.headers); h2.delete("Content-Length"); h2.delete("Content-Encoding");
+    return new Response(fixed, { status: res.status, statusText: res.statusText, headers: h2 });
+  }
+
   MKC.fetch = async function (input, init = {}) {
     const url = new URL(typeof input === "string" ? input : input.url);
+    if (/\/storage\/v1\/object\//.test(url.pathname) && /cow-photos/.test(url.pathname)) return fixStorage(url, init);
     const m = url.pathname.match(/\/rest\/v1\/(rpc\/)?([A-Za-z0-9_]+)/);
     if (!m) return realFetch(input, init);
     const rpc = !!m[1], table = m[2];
