@@ -17,7 +17,9 @@
   const ALLOW = new Set(["chequeo", "chequeo_tratamientos", "chequeo_resultados",
     "pesaje_registrar", "pesaje_totales", "diaria_registrar", "diaria_totales", "diaria_resumen",
     // 24/11/2026: módulos que funcionan con las tablas que ya tiene la base de clientes
-    "registros_ver", "listas_ver", "pesot_registrar", "generador_ver"]);
+    "registros_ver", "listas_ver", "pesot_registrar", "generador_ver",
+    // Reportes: solo Reproducción e IA y toros (resumen de fertilidad: SQL/clientes/06_reporte_fertilidad_clientes.sql)
+    "reporte_ver"]);
   const DENY = new Set([]);                           // fotos: activas desde el 24/11/2026 (SQL/clientes/05_fotos_clientes.sql)
 
   const MKC = window.MKC = {
