@@ -19,7 +19,9 @@
     // 24/11/2026: módulos que funcionan con las tablas que ya tiene la base de clientes
     "registros_ver", "listas_ver", "pesot_registrar", "generador_ver",
     // Reportes: solo Reproducción e IA y toros (resumen de fertilidad: SQL/clientes/06_reporte_fertilidad_clientes.sql)
-    "reporte_ver"]);
+    "reporte_ver",
+    // 26/11/2026: Suplementación (ración de concentrado por finca en ☰ Configuración → Ración; tabla cow_concentrate en 07_modulos_clientes.sql)
+    "racion_ver", "racion_registrar"]);
   const DENY = new Set([]);                           // fotos: activas desde el 24/11/2026 (SQL/clientes/05_fotos_clientes.sql)
 
   const MKC = window.MKC = {
