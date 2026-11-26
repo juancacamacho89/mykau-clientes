@@ -23,13 +23,17 @@
     "reporte_ver",
     // 26/11/2026: Suplementación (ración de concentrado por finca en ☰ Configuración → Ración; tabla cow_concentrate en 07_modulos_clientes.sql)
     "racion_ver", "racion_registrar"]);
+  // módulos que solo ve Juan (Admin Principal) hasta que él los prenda a un perfil en ☰ Usuarios y permisos
+  // (sin el "permiso parecido" de Mykau: el perfil tiene que tener ESE permiso). 26/11/2026: Suplementación
+  const EXPLICIT = new Set(["racion_ver", "racion_registrar"]);
+  const mkcExplicit = k => { try { return myProfile === "Admin Principal" || ["R", "V"].includes(perms[k]) && (k !== "racion_registrar" || perms[k] === "R"); } catch (e) { return false; } };
   const DENY = new Set([]);                           // fotos: activas desde el 24/11/2026 (SQL/clientes/05_fotos_clientes.sql)
 
   const MKC = window.MKC = {
     client: localStorage.getItem("mkClient") || "",   // código del cliente activo
     clients: [],                                       // clientes a los que entra este usuario
     farmClient: {},                                    // finca → cliente
-    ok: k => !DENY.has(k) && (ALLOW.has(k) || /^vacas_/.test(k)),
+    ok: k => !DENY.has(k) && (ALLOW.has(k) || /^vacas_/.test(k)) && (!EXPLICIT.has(k) || mkcExplicit(k)),
   };
 
   let mapAuth = null, mapPromise = null;
