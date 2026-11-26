@@ -10,6 +10,7 @@
   const realFetch = window.fetch.bind(window);
   const COW_KEYS = ["cow_id", "dam"];                 // columnas que guardan un ID de vaca
   const RPC_KEYS = ["p_cow", "cid"];                   // parámetros de funciones con un ID de vaca
+  const ID_TABLES = ["cows", "cow_merit"];           // tablas/vistas donde "id" es el ID de la vaca (cow_merit: índice de Vida productiva)
   // tablas que se filtran por finca cuando el usuario tiene varios clientes
   const FARM_TABLES = ["user_farm_access", "farm_lists", "farm_settings", "daily_milk", "lot_feed", "cow_plans",
     "treatments_cow", "repro_checks", "app_event_log", "cow_pen_history", "cows"];
@@ -142,7 +143,7 @@
     // filtros
     const sp = url.searchParams, out = new URLSearchParams();
     for (const [k, v] of sp) {
-      if (COW_KEYS.includes(k) || (k === "id" && table === "cows")) out.append(k, fixFilter(v));
+      if (COW_KEYS.includes(k) || (k === "id" && ID_TABLES.includes(table))) out.append(k, fixFilter(v));
       else if (k === "or" || k === "and") out.append(k, fixOr(v));
       else out.append(k, v);
     }
@@ -164,7 +165,7 @@
     if (!/json/i.test(ct) || res.status === 204) return res;
     const txt = await res.text();
     let fixed = txt;
-    try { fixed = JSON.stringify(fixResp(JSON.parse(txt), table === "cows" && !rpc)); } catch (e) { /* se deja igual */ }
+    try { fixed = JSON.stringify(fixResp(JSON.parse(txt), ID_TABLES.includes(table) && !rpc)); } catch (e) { /* se deja igual */ }
     const h2 = new Headers(res.headers); h2.delete("Content-Length"); h2.delete("Content-Encoding");
     return new Response(fixed, { status: res.status, statusText: res.statusText, headers: h2 });
   };
