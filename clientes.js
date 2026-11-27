@@ -29,11 +29,29 @@
   const mkcExplicit = k => { try { return myProfile === "Admin Principal" || ["R", "V"].includes(perms[k]) && (k !== "racion_registrar" || perms[k] === "R"); } catch (e) { return false; } };
   const DENY = new Set([]);                           // fotos: activas desde el 24/11/2026 (SQL/clientes/05_fotos_clientes.sql)
 
+  // módulos que se prenden / apagan por cliente (☰ Configuración → 🧩 Módulos; clients.modules). Mis vacas siempre va.
+  const MODS = [["chequeo", "🩺 Chequeo repro", /^chequeo/], ["pesaje", "🥛 Pesaje de leche", /^pesaje_/], ["diaria", "🥛 Leche diaria", /^diaria_/],
+    ["racion", "🌾 Suplementación", /^racion_/], ["listas", "📋 Listas de trabajo", /^listas_ver$/], ["generador", "🧾 Generador de listas", /^generador_ver$/],
+    ["pesot", "⚖️ Pesaje terneras", /^pesot_/], ["reporte", "📊 Reportes", /^reporte_ver$/], ["registros", "🗂️ Registros", /^registros_ver$/]];
+  let modsOf = {};                                     // cliente → { módulo: false }
+  const modOf = k => (MODS.find(m => m[2].test(k)) || [])[0];
+  const modOff = k => { const m = modOf(k); return !!m && (modsOf[MKC.client] || {})[m] === false; };
+  const isBoss = () => { try { return myProfile === "Admin Principal"; } catch (e) { return false; } };
   const MKC = window.MKC = {
+    MODS,
+    setMods: (cl, m) => { modsOf[cl] = m || {}; },
+    // en el Inicio, a Juan le marca "apagado" lo que el cliente no ve
+    markHome: () => { document.querySelectorAll(".apps [data-perm]").forEach(el => {
+      const off = el.dataset.perm.split(" ").every(k => !modOf(k) || modOff(k)) && el.dataset.perm.split(" ").some(modOf);
+      let tag = el.querySelector(".mkc-off");
+      if (off && !tag){ tag = document.createElement("i"); tag.className = "mkc-off"; tag.textContent = "apagado";
+        tag.style.cssText = "position:absolute;top:2px;left:50%;transform:translateX(-50%);font-size:10px;font-style:normal;background:#888;color:#fff;border-radius:6px;padding:0 5px";
+        el.style.position = "relative"; el.appendChild(tag); }
+      if (!off && tag) tag.remove(); }); },
     client: localStorage.getItem("mkClient") || "",   // código del cliente activo
     clients: [],                                       // clientes a los que entra este usuario
     farmClient: {},                                    // finca → cliente
-    ok: k => !DENY.has(k) && (ALLOW.has(k) || /^vacas_/.test(k)) && (!EXPLICIT.has(k) || mkcExplicit(k)),
+    ok: k => !DENY.has(k) && (ALLOW.has(k) || /^vacas_/.test(k)) && (!EXPLICIT.has(k) || mkcExplicit(k)) && (isBoss() || !modOff(k)),
   };
 
   let mapAuth = null, mapPromise = null;
@@ -43,20 +61,28 @@
     if (mapPromise && auth === mapAuth) return mapPromise;
     mapAuth = auth;
     const h = new Headers({ apikey: headers.get("apikey") || "", Authorization: auth, Accept: "application/json" });
-    mapPromise = realFetch(window.APP_CONFIG.SUPABASE_URL + "/rest/v1/farms?select=id,client", { headers: h })
+    mapPromise = realFetch(window.APP_CONFIG.SUPABASE_URL + "/rest/v1/farms?select=id,client,name&order=name", { headers: h })
       .then(r => r.ok ? r.json() : [])
       .then(rows => {
         MKC.farmClient = Object.fromEntries((rows || []).map(f => [f.id, f.client]));
+        MKC.farmName = Object.fromEntries((rows || []).map(f => [f.id, f.name]));
+        realFetch(window.APP_CONFIG.SUPABASE_URL + "/rest/v1/clients?select=code,modules", { headers: h }).then(r => r.ok ? r.json() : [])
+          .then(cl => { modsOf = Object.fromEntries((cl || []).map(x => [x.code, x.modules || {}])); try { if (typeof renderHome === "function" && !document.getElementById("tabInicio")?.classList.contains("hidden")) renderHome(); } catch (e) {} })
+          .catch(() => {});
         MKC.clients = [...new Set((rows || []).map(f => f.client).filter(Boolean))].sort();
         if (!MKC.clients.includes(MKC.client)) MKC.client = MKC.clients[0] || "";
         localStorage.setItem("mkClient", MKC.client);
-        drawPicker();
+        drawPicker(); drawFarmBox();
         return MKC;
       })
       .catch(() => { mapPromise = null; return MKC; });
     return mapPromise;
   }
-  const myFarmIds = () => Object.keys(MKC.farmClient).filter(f => MKC.farmClient[f] === MKC.client);
+  // fincas del cliente activo · las que la persona escogió NO ver en ☰ → "🏡 Fincas que veo" (en este celular; Juan 27/11/2026)
+  const clientFarms = () => Object.keys(MKC.farmClient).filter(f => MKC.farmClient[f] === MKC.client);
+  const hideFarms = () => { try { return new Set(JSON.parse(localStorage.getItem("mkHideFarms") || "[]").map(String)); } catch (e) { return new Set(); } };
+  const myFarmIds = () => { const all = clientFarms(), h = hideFarms(), v = all.filter(f => !h.has(String(f))); return v.length ? v : all; };
+  const farmsHidden = () => myFarmIds().length < clientFarms().length;
   const pre = () => MKC.client;
   const add = v => (typeof v === "string" || typeof v === "number") && String(v) !== "" && pre() && !String(v).startsWith(pre()) ? pre() + String(v).toUpperCase() : v;
   const strip = v => typeof v === "string" && pre() && v.startsWith(pre()) && v.length > pre().length ? v.slice(pre().length) : v;
@@ -152,7 +178,7 @@
       else out.append(k, v);
     }
     // solo lo del cliente activo (para Juan, que entra a fincas de varios clientes)
-    if (!rpc && MKC.clients.length > 1) {
+    if (!rpc && (MKC.clients.length > 1 || farmsHidden())) {
       const ids = myFarmIds();
       if (table === "farms") out.append("id", `in.(${ids.join(",")})`);
       else if (FARM_TABLES.includes(table) && method === "GET") out.append("farm_id", `in.(${ids.join(",")})`);
@@ -173,6 +199,37 @@
     const h2 = new Headers(res.headers); h2.delete("Content-Length"); h2.delete("Content-Encoding");
     return new Response(fixed, { status: res.status, statusText: res.statusText, headers: h2 });
   };
+
+  // ☰ menú → "🏡 Fincas que veo": prender / apagar las fincas que esta persona ve en este celular (si tiene 2 o más del cliente)
+  MKC.menuNeeded = () => clientFarms().length > 1;
+  MKC.drawFarmBox = () => drawFarmBox();
+  function drawFarmBox() {
+    const put = () => {
+      const list = document.querySelector("#drawer .dw-list"); if (!list) return;
+      let box = document.getElementById("mkcFarmBox");
+      const fs = clientFarms();
+      if (fs.length < 2) { box?.remove(); return; }
+      if (!box) {
+        box = document.createElement("div"); box.id = "mkcFarmBox"; box.style.cssText = "padding:10px 14px;border-top:1px solid var(--line)";
+        box.addEventListener("change", e => {
+          const t = e.target.closest("[data-mkcfarm]"); if (!t) return;
+          const h = hideFarms(); t.checked ? h.delete(t.dataset.mkcfarm) : h.add(t.dataset.mkcfarm);
+          if (fs.every(f => h.has(String(f)))) { t.checked = true; return alert("Deja al menos una finca prendida"); }
+          localStorage.setItem("mkHideFarms", JSON.stringify([...h]));
+          // lo guardado en el celular era con las fincas anteriores: se vuelve a bajar
+          const keep = {}; for (const k of Object.keys(localStorage)) if (/^sb-|^mkClient$|^mkHideFarms$|^perms$|^profile$|^myName$/.test(k)) keep[k] = localStorage.getItem(k);
+          localStorage.clear(); for (const k in keep) localStorage.setItem(k, keep[k]);
+          location.hash = ""; location.reload();
+        });
+        list.appendChild(box);
+      }
+      const h = hideFarms();
+      box.innerHTML = `<b>🏡 Fincas que veo</b><div class="sub" style="margin:2px 0 6px">Solo en este celular. Apaga las que no quieres ver ahora.</div>`
+        + fs.map(f => `<label style="display:flex;gap:10px;align-items:center;padding:6px 0;color:var(--ink)"><input type="checkbox" data-mkcfarm="${f}" ${h.has(String(f)) ? "" : "checked"} style="width:22px;height:22px">${(MKC.farmName[f] || "Finca " + f).replace(/[<>&]/g, "")}</label>`).join("");
+      try { if (MKC.menuNeeded()) document.getElementById("menuBtn")?.classList.remove("hidden"); } catch (e) {}
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", put); else put();
+  }
 
   // selector de cliente (solo si el usuario entra a fincas de más de un cliente)
   function drawPicker() {
